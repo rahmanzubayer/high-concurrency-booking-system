@@ -1,0 +1,30 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: booking-ingest-service
+
+  threads:
+    virtual:
+      enabled: true # Keeps our standard Web MVC stack blazing fast under high I/O wait times
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  cloud:
+    function:
+      definition: outboundBooking # Declares our functional bean name
+    stream:
+      bindings:
+        outboundBooking-out-0:
+          destination: booking-confirmed-topic
+          content-type: application/json
+          producer:
+            # Guarantees that at least one broker receives the event before returning success
+            required-acks: 1
+      kafka:
+        binder:
+          brokers: localhost:9092

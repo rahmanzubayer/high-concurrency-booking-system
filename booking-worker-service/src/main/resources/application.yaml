@@ -1,0 +1,34 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: booking-worker-service
+
+  threads:
+    virtual:
+      enabled: true # Let virtual threads consume Kafka streams simultaneously
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/booking_db
+    username: postgres
+    password: password
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Flyway handles updates; schema validation only
+
+  cloud:
+    function:
+      definition: processBookingOrder # Binds our functional bean code
+
+    stream:
+      bindings:
+        processBookingOrder-in-0:
+          destination: booking-confirmed-topic
+          group: booking-worker-group # Guarantees load balancing between worker nodes
+          content-type: application/json
+
+      kafka:
+        binder:
+          brokers: localhost:9092
