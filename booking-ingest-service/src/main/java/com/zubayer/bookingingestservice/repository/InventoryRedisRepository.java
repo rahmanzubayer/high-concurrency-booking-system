@@ -9,6 +9,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 
 // Local Imports
@@ -17,6 +18,8 @@ import com.zubayer.bookingingestservice.redis.RedisKeys;
 @Repository
 @RequiredArgsConstructor
 public class InventoryRedisRepository {
+
+    private static final long KEY_TTL_SECONDS = Duration.ofHours(24).toSeconds();
 
     private final StringRedisTemplate redisTemplate;
     private final RedisScript<Long> decrementScript;
@@ -27,11 +30,16 @@ public class InventoryRedisRepository {
 
         String inventoryKey = RedisKeys.inventory(itemId);
         String bookedUsersKey = RedisKeys.bookedUsers(itemId);
+        String outboxKey = RedisKeys.outbox(itemId);
 
         Long code = redisTemplate.execute(
                 decrementScript,
-                List.of(inventoryKey, bookedUsersKey),
-                userId
+                List.of(inventoryKey, bookedUsersKey, outboxKey),
+                userId,
+                itemId,
+                transactionId,
+                String.valueOf(System.currentTimeMillis()),
+                String.valueOf(KEY_TTL_SECONDS)
         );
 
         return new AcquireResult(AcquireStatus.from(code), transactionId);

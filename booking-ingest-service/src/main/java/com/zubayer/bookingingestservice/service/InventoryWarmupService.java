@@ -33,6 +33,7 @@ public class InventoryWarmupService {
                 .map(product -> {
 
                     redisTemplate.delete(RedisKeys.bookedUsers(itemId));
+                    redisTemplate.delete(RedisKeys.outbox(itemId));
 
                     redisTemplate.opsForValue().set(
                             RedisKeys.inventory(itemId),
