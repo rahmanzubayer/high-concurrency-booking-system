@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 
 // Local Imports
 import com.zubayer.bookingworkerservice.model.Order;
+import org.springframework.dao.DataIntegrityViolationException;
 import com.zubayer.bookingworkerservice.dto.BookingConfirmedEvent;
 import com.zubayer.bookingworkerservice.repository.OrderRepository;
 
@@ -26,11 +27,6 @@ public class BookingConsumerConfig {
 
             log.info("Received booking confirmation for Item: {}, User: {}", event.itemId(), event.userId());
 
-            if (orderRepository.existsByTransactionId(event.transactionId())) {
-                log.warn("Duplicate message detected for transaction id: {}. Skipping record persistence.", event.transactionId());
-                return;
-            }
-
             Order order = Order.builder()
                     .transactionId(event.transactionId())
                     .userId(event.userId())
@@ -39,9 +35,12 @@ public class BookingConsumerConfig {
                     .createdAt(event.timestamp())
                     .build();
 
-            orderRepository.save(order);
-
-            log.info("Successfully persisted Order ID: {} for Transaction: {}", order.getId(), event.transactionId());
+            try {
+                orderRepository.save(order);
+                log.info("Persisted order for transaction {}", event.transactionId());
+            } catch (DataIntegrityViolationException e) {
+                log.debug("Duplicate delivery for transaction {} — already persisted", event.transactionId());
+            }
 
         };
 

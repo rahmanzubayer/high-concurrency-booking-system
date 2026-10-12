@@ -35,3 +35,9 @@ spring:
       kafka:
         binder:
           brokers: localhost:9092
+        bindings:
+          outboundBooking-out-0:
+            producer:
+              sync: true
+              configuration:
+                acks: all

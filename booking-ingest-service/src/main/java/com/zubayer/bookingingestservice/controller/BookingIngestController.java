@@ -9,7 +9,6 @@ import java.util.Map;
 
 // Local Imports
 import com.zubayer.bookingingestservice.dto.AcquireResult;
-import com.zubayer.bookingingestservice.messaging.BookingEventPublisher;
 import com.zubayer.bookingingestservice.repository.InventoryRedisRepository;
 
 @RestController
@@ -18,7 +17,6 @@ import com.zubayer.bookingingestservice.repository.InventoryRedisRepository;
 public class BookingIngestController {
 
     private final InventoryRedisRepository inventoryRedisRepository;
-    private final BookingEventPublisher bookingEventPublisher;
 
     @PostMapping(path = "/items/{itemId}")
     public ResponseEntity<Map<String, String>> secureBookingSlot(@PathVariable String itemId, @RequestHeader("X-User-Id") String userId) {
@@ -27,13 +25,10 @@ public class BookingIngestController {
 
         return switch (result.status()) {
 
-            case ACQUIRED -> {
-                bookingEventPublisher.publishBookingConfirmation(itemId, userId, result.transactionId());
-                yield ResponseEntity.status(HttpStatus.ACCEPTED)
-                        .body(Map.of("status", "SUCCESS",
-                                "transactionId", result.transactionId(),
-                                "message", "Booking confirmed. Processing order..."));
-            }
+            case ACQUIRED -> ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .body(Map.of("status", "SUCCESS",
+                            "transactionId", result.transactionId(),
+                            "message", "Booking confirmed. Processing order..."));
 
             case ALREADY_BOOKED -> ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("status", "DUPLICATE",

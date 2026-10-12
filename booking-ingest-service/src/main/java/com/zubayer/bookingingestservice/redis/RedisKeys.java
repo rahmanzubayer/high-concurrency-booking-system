@@ -4,6 +4,8 @@ public final class RedisKeys {
 
     private RedisKeys() {}
 
+    public static final String ACTIVE_ITEMS = "flash-sale:active-items";
+
     public static String inventory(String itemId) {
         return "item:{" + itemId + "}:inventory";
     }

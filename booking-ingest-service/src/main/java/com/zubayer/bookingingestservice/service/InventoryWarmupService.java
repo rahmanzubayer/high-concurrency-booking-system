@@ -41,6 +41,8 @@ public class InventoryWarmupService {
                             KEY_TTL
                     );
 
+                    redisTemplate.opsForSet().add(RedisKeys.ACTIVE_ITEMS, itemId);
+
                     log.info("Warmed up item {} with stock {}", itemId, product.getTotalStock());
                     return new WarmupResult(itemId, product.getName(), product.getTotalStock());
                 });
