@@ -10,7 +10,7 @@ spring:
       enabled: true # Let virtual threads consume Kafka streams simultaneously
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/booking_db
+    url: jdbc:postgresql://localhost:5433/booking_db
     username: postgres
     password: password
 
