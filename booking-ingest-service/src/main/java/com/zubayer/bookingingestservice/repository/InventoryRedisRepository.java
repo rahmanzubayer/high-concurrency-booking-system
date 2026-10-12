@@ -25,8 +25,8 @@ public class InventoryRedisRepository {
 
     public Long tryAcquireSlot(String itemId, String userId) {
 
-        String inventoryKey = String.format("item:%s:inventory", itemId);
-        String bookedUsersKey = String.format("item:%s:booked_users", itemId);
+        String inventoryKey = String.format("item:{%s}:inventory", itemId);
+        String bookedUsersKey = String.format("item:{%s}:booked_users", itemId);
 
         return redisTemplate.execute(
                 decrementScript,

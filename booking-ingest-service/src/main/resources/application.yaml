@@ -15,16 +15,11 @@ spring:
       port: 6380
 
   cloud:
-    function:
-      definition: outboundBooking # Declares our functional bean name
     stream:
       bindings:
         outboundBooking-out-0:
           destination: booking-confirmed-topic
           content-type: application/json
-          producer:
-            # Guarantees that at least one broker receives the event before returning success
-            required-acks: 1
       kafka:
         binder:
           brokers: localhost:9092
