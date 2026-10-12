@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.cloud.stream.function.StreamBridge;
 
-import java.util.UUID;
 import java.time.Instant;
 
 // Local Imports
@@ -18,9 +17,7 @@ public class BookingEventPublisher {
 
     private final StreamBridge streamBridge;
 
-    public void publishBookingConfirmation(String itemId, String userId) {
-
-        String transactionId = UUID.randomUUID().toString();
+    public void publishBookingConfirmation(String itemId, String userId, String transactionId) {
 
         BookingConfirmedEvent event = new BookingConfirmedEvent(
                 itemId,

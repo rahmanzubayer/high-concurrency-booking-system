@@ -12,4 +12,8 @@ public final class RedisKeys {
         return "item:{" + itemId + "}:booked_users";
     }
 
+    public static String outbox(String itemId) {
+        return "item:{" + itemId + "}:outbox";
+    }
+
 }
