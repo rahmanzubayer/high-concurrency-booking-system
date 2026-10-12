@@ -34,6 +34,7 @@ public class InventoryWarmupService {
 
                     redisTemplate.delete(RedisKeys.bookedUsers(itemId));
                     redisTemplate.delete(RedisKeys.outbox(itemId));
+                    redisTemplate.delete(RedisKeys.soldOut(itemId));
 
                     redisTemplate.opsForValue().set(
                             RedisKeys.inventory(itemId),

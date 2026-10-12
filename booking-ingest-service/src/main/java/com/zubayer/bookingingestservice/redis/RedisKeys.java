@@ -18,4 +18,8 @@ public final class RedisKeys {
         return "item:{" + itemId + "}:outbox";
     }
 
+    public static String soldOut(String itemId) {
+        return "item:{" + itemId + "}:soldout";
+    }
+
 }

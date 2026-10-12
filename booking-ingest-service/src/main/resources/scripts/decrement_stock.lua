@@ -1,6 +1,7 @@
 -- KEYS[1]: item:{itemId}:inventory
 -- KEYS[2]: item:{itemId}:booked_users
 -- KEYS[3]: item:{itemId}:outbox        (Redis Stream)
+-- KEYS[4]: item:{itemId}:soldout
 -- ARGV[1]: userId
 -- ARGV[2]: itemId
 -- ARGV[3]: transactionId
@@ -25,7 +26,7 @@ end
 
 -- 3. Take the slot AND record the event, in one atomic execution.
 --    This is the transactional outbox: there is no window between them.
-redis.call('DECR', KEYS[1])
+local remaining = redis.call('DECR', KEYS[1])
 redis.call('SADD', KEYS[2], ARGV[1])
 redis.call('XADD', KEYS[3], '*',
         'itemId', ARGV[2],
@@ -37,5 +38,10 @@ redis.call('XADD', KEYS[3], '*',
 local ttl = tonumber(ARGV[5])
 redis.call('EXPIRE', KEYS[2], ttl)
 redis.call('EXPIRE', KEYS[3], ttl)
+
+-- 5. The moment the last slot goes, raise a flag the edge can read cheaply.
+if remaining <= 0 then
+    redis.call('SET', KEYS[4], '1', 'EX', ttl)
+end
 
 return 1 -- Code 1: slot secured

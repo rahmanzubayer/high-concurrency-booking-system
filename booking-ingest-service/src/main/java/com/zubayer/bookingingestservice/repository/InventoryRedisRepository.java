@@ -31,10 +31,11 @@ public class InventoryRedisRepository {
         String inventoryKey = RedisKeys.inventory(itemId);
         String bookedUsersKey = RedisKeys.bookedUsers(itemId);
         String outboxKey = RedisKeys.outbox(itemId);
+        String soldOutKey = RedisKeys.soldOut(itemId);
 
         Long code = redisTemplate.execute(
                 decrementScript,
-                List.of(inventoryKey, bookedUsersKey, outboxKey),
+                List.of(inventoryKey, bookedUsersKey, outboxKey, soldOutKey),
                 userId,
                 itemId,
                 transactionId,
