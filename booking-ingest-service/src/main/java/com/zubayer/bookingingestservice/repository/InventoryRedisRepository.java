@@ -8,6 +8,9 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import java.util.List;
 
+// Local Imports
+import com.zubayer.bookingingestservice.redis.RedisKeys;
+
 @Repository
 public class InventoryRedisRepository {
 
@@ -25,8 +28,8 @@ public class InventoryRedisRepository {
 
     public Long tryAcquireSlot(String itemId, String userId) {
 
-        String inventoryKey = String.format("item:{%s}:inventory", itemId);
-        String bookedUsersKey = String.format("item:{%s}:booked_users", itemId);
+        String inventoryKey = RedisKeys.inventory(itemId);
+        String bookedUsersKey = RedisKeys.bookedUsers(itemId);
 
         return redisTemplate.execute(
                 decrementScript,

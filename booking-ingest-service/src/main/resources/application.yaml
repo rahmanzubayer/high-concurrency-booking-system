@@ -5,6 +5,18 @@ spring:
   application:
     name: booking-ingest-service
 
+  datasource:
+    url: jdbc:postgresql://localhost:5433/booking_db
+    username: postgres
+    password: password
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+
   threads:
     virtual:
       enabled: true # Keeps our standard Web MVC stack blazing fast under high I/O wait times
