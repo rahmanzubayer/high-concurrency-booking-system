@@ -1,3 +1,4 @@
+![CI](https://github.com/<your-username>/<repo>/actions/workflows/ci.yml/badge.svg)
 # High-Concurrency Flash Sale Booking Engine
 
 A distributed booking system that sells a strictly limited inventory to a sudden burst of
