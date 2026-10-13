@@ -25,6 +25,7 @@ spring:
     redis:
       host: localhost
       port: 6380
+      timeout: 1s
 
   cloud:
     stream:
@@ -41,3 +42,30 @@ spring:
               sync: true
               configuration:
                 acks: all
+resilience4j:
+  circuitbreaker:
+    instances:
+      redisInventory:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 20
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.dao.DataAccessResourceFailureException
+          - org.springframework.dao.QueryTimeoutException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

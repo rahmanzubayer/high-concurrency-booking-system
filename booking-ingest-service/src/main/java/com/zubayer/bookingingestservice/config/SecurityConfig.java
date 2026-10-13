@@ -20,6 +20,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/bookings/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 ).build();
     }
