@@ -58,3 +58,4 @@ jobs:
           name: surefire-reports-${{ matrix.service }}
           path: ${{ matrix.service }}/target/surefire-reports/
           retention-days: 7
+
