@@ -59,3 +59,59 @@ jobs:
           path: ${{ matrix.service }}/target/surefire-reports/
           retention-days: 7
 
+  publish:
+    name: Publish ${{ matrix.service }}
+    # Images are only built from code that already passed every test.
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # The workflow-level default is contents:read. Pushing to GHCR needs packages:write,
+    # granted here only — the test jobs above have no ability to publish anything.
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - gateway-service
+          - booking-ingest-service
+          - booking-worker-service
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # Issued automatically per run. No personal access token to create, store or rotate.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache stored in GitHub Actions cache, so Maven dependencies are not
+          # re-downloaded on every push.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
