@@ -133,6 +133,48 @@ application errors would mean a bug in the Lua script trips the breaker and gets
 users as a calm "system busy" — turning a loud, fixable error into a silent one. A circuit
 breaker protects a healthy system from a sick dependency; it is not an error handler.
 
+### Reconciliation and convergence
+
+A scheduled job compares the users holding a slot in Redis against the orders durably written
+to PostgreSQL. It is a **set difference**, not a subtraction of totals — the orders table
+accumulates across sales while `booked_users` is cleared at each warm-up, so comparing counts
+hides real divergence behind a negative number.
+
+```
+unexplainedGap = |slotHolders \ usersWithOrders| − outboxPending
+```
+
+Sampled once per second during a 5,000-slot sale:
+
+```
+granted=5000  without_order=4425  outbox_pending=500  gap=3925
+granted=5000  without_order=4060  outbox_pending=500  gap=3560
+granted=5000  without_order=3574  outbox_pending=  0  gap=3574
+granted=5000  without_order=3100  outbox_pending=  0  gap=3100
+granted=5000  without_order=2654  outbox_pending=  0  gap=2654
+granted=5000  without_order=2169  outbox_pending=  0  gap=2169
+granted=5000  without_order=1684  outbox_pending=  0  gap=1684
+granted=5000  without_order=1182  outbox_pending=  0  gap=1182
+granted=5000  without_order= 736  outbox_pending=  0  gap= 736
+granted=5000  without_order= 127  outbox_pending=  0  gap= 127
+```
+
+That is eventual consistency made visible: ~450 orders/second draining to zero, with
+`outbox_pending` capped at the relay's 500-entry batch size and `without_order` showing work
+already in Kafka awaiting the worker. For a 100-slot sale the whole pipeline converges in
+under half a second — faster than a shell command can observe it.
+
+**The gap is expected to be positive during and just after a sale.** At any single instant you
+cannot distinguish "late" from "lost" — only elapsed time distinguishes them. So the service
+publishes the number and nothing else; the judgement belongs in an alert rule that fires when
+`booking_reconciliation_unexplained_gap` stays non-zero across consecutive scrapes.
+
+**What this catches that nothing else does:** a Lua script that failed partway through, after
+consuming a slot but before writing its outbox entry. Redis does not roll back, so the slot is
+gone and no event exists anywhere in the system. Verified by injecting exactly that state
+(`SADD booked_users ghost_user`) and confirming the gauge reports it — a check for failure
+that has only ever been tested against healthy data is not a check.
+
 ### Observability
 
 `/actuator/prometheus` exposes the invariants as metrics:
@@ -284,6 +326,7 @@ service owns all migrations here as a deliberate simplification.
 
 **No compensation path.** If a message is permanently dead-lettered, the Redis slot stays
 consumed. A reverse flow should re-increment inventory and remove the user from the set.
+Reconciliation detects this state but does not repair it.
 
 **The gateway has timeouts but no circuit breaker.** Its two Redis calls per request are
 unprotected, so during a Redis outage every request pays the full timeout on both — about

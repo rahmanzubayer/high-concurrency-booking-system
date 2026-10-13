@@ -36,6 +36,8 @@ public class FlashSaleLoadTest {
     static final String ITEM = System.getProperty("item", "limited-item-01");
     static final int USERS = Integer.getInteger("users", 10_000);
 
+    static final String RUN_ID = System.getProperty("run", Long.toString(System.currentTimeMillis() % 1_000_000));
+
     public static void main(String[] args) throws Exception {
 
         HttpClient client = HttpClient.newBuilder()
@@ -43,7 +45,7 @@ public class FlashSaleLoadTest {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
 
-        System.out.printf("target=%s  item=%s  users=%d%n%n", TARGET, ITEM, USERS);
+        System.out.printf("run=%s target=%s  item=%s  users=%d%n%n", RUN_ID, TARGET, ITEM, USERS);
 
         // --- 1. Reset the sale: stock back to total_stock, booked_users cleared ---
         HttpResponse<String> warm = client.send(
@@ -70,7 +72,7 @@ public class FlashSaleLoadTest {
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
 
             for (int i = 0; i < USERS; i++) {
-                final String userId = "load_user_" + i;
+                final String userId = "load_user_" + RUN_ID + "_" + i;
 
                 pool.submit(() -> {
                     armed.countDown();

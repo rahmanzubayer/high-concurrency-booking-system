@@ -1,15 +1,13 @@
 package com.zubayer.bookingworkerservice.model;
 
-import lombok.Data;
-import lombok.Builder;
+import lombok.*;
 import jakarta.persistence.*;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
 
 import java.time.Instant;
 
-@Data
 @Entity
+@Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -35,5 +33,28 @@ public class Order {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    /**
+     * Equality on the business key, never the generated id.
+     * <p>
+     * Lombok's @Data derives equals/hashCode from every field, including @Id. That id is
+     * null before persist and assigned by the database afterward — so an entity's hashCode
+     * CHANGES mid-transaction. Put it in a HashSet before saving, and you can no longer find
+     * it in that set after saving. transaction_id is set before persist and never changes.
+     */
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+
+        if (!(o instanceof Order other)) return false;
+
+        return transactionId != null && transactionId.equals(other.getTransactionId());
+    }
+
+    @Override
+    public int hashCode() {
+        return Order.class.hashCode();
+    }
 
 }
