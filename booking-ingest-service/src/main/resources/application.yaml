@@ -62,7 +62,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,circuitbreakers,circuitbreakerevents
+        include: health,circuitbreakers,circuitbreakerevents,metrics,prometheus
   endpoint:
     health:
       show-details: always

@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 
 // Local Imports
+import com.zubayer.bookingingestservice.metrics.BookingMetrics;
 import com.zubayer.bookingingestservice.dto.BookingConfirmedEvent;
 
 /**
@@ -48,6 +49,7 @@ public class OutboxRelay {
 
     private final StringRedisTemplate redis;
     private final StreamBridge streamBridge;
+    private final BookingMetrics bookingMetrics;
 
     /**
      * Stable per instance, on purpose. A restarted relay must be able to see the
@@ -69,6 +71,7 @@ public class OutboxRelay {
                 drainItem(itemId);
             } catch (Exception e) {
                 log.error("Relay pass failed for item {}; will retry next tick", itemId, e);
+                bookingMetrics.recordRelayErrors();
             }
         }
     }
@@ -114,9 +117,10 @@ public class OutboxRelay {
         } finally {
             // Acknowledge whatever genuinely reached Kafka, even if a later send threw.
             if (!sent.isEmpty()) {
-                redis.opsForStream().acknowledge(streamKey, CONSUMER_GROUP,
-                        sent.toArray(new RecordId[0]));
+                redis.opsForStream().acknowledge(streamKey, CONSUMER_GROUP, sent.toArray(new RecordId[0]));
                 log.debug("Relayed {} entries from {}", sent.size(), streamKey);
+
+                bookingMetrics.recordPublished(sent.size());
             }
         }
     }

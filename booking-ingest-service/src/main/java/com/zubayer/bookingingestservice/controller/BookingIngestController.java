@@ -1,5 +1,6 @@
 package com.zubayer.bookingingestservice.controller;
 
+import com.zubayer.bookingingestservice.metrics.BookingMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,11 +18,13 @@ import com.zubayer.bookingingestservice.repository.InventoryRedisRepository;
 public class BookingIngestController {
 
     private final InventoryRedisRepository inventoryRedisRepository;
+    private final BookingMetrics bookingMetrics;
 
     @PostMapping(path = "/items/{itemId}")
     public ResponseEntity<Map<String, String>> secureBookingSlot(@PathVariable String itemId, @RequestHeader("X-User-Id") String userId) {
 
         AcquireResult result = inventoryRedisRepository.tryAcquireSlot(itemId, userId);
+        bookingMetrics.recordAttempt(result.status());
 
         return switch (result.status()) {
 

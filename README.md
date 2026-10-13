@@ -24,13 +24,12 @@ correctness guarantees that matter.
 Every request is issued from its own virtual thread; all 10,000 block on a single starting
 gate so the traffic arrives as a genuine thundering herd rather than a ramp.
 
+**Correctness — identical in every run:**
+
 ```
   HTTP 202      100    slot secured
   HTTP 410    9,900    sold out
   errors          0
-
-  latency       p50 316 ms   p95 574 ms   p99 649 ms   max 676 ms
-  throughput    10,799 req/s  (926 ms to drain the full burst)
 
   Redis stock          0
   distinct holders   100
@@ -38,31 +37,48 @@ gate so the traffic arrives as a genuine thundering herd rather than a ramp.
   oversold             0
 ```
 
-Latency here is **queue depth, not service time**. Ten thousand requests arrive at the same
-instant and drain at ~10,800/s, so the median request waits behind roughly 5,000 others.
-Per-request service time stays flat.
+**Throughput — five consecutive runs, warm JVM:**
 
-### Throughput across three architectural revisions
+```
+  13,550   11,561   12,019   13,021   13,831   req/s
+  median 13,021 · range 11,561–13,831 · spread ~17% of median
+  full burst drains in 723–865 ms
+```
 
-Each row is the same test against the same invariants — only the architecture changed.
+A single throughput number from a developer workstation is noise. Five runs with the spread
+stated is the minimum that means anything, and the variance here is larger than most of the
+differences one would want to claim between configurations.
 
-| | throughput | p50 | p95 | p99 | wall |
-|---|---|---|---|---|---|
-| Inline Kafka publish on the request path | 6,798 req/s | 787 ms | ~1,208 ms | 1,242 ms | 1,471 ms |
-| Transactional outbox + background relay | 8,446 req/s | 318 ms | 717 ms | 748 ms | 1,184 ms |
-| \+ edge admission control | **10,799 req/s** | **316 ms** | **574 ms** | **649 ms** | **926 ms** |
+**The first run after restarting a service yields ~4,500 req/s** — about a third of warm
+throughput — while the JVM loads classes and the JIT compiles the hot path. Reported
+separately as the cold-start figure rather than averaged in.
 
-Two results worth calling out:
+Latency is **queue depth, not service time**: 10,000 requests arrive in the same instant and
+drain at ~13,000/s, so the median request waits behind roughly 5,000 others. Per-request
+service time stays flat.
 
-**Moving the Kafka publish off the request path made the system both safer and faster**
-(+24% throughput, p50 787 → 318 ms) *while* upgrading from fire-and-forget publishing to
-synchronous `acks=all`. Durability and latency usually trade against each other; decoupling
-bought both.
+### On the architectural progression
 
-**Admission control delivered +28% by eliminating network round trips, not computation.**
-Each of the 9,900 losing requests had been paying for a Redis call at the gateway for rate
-limiting, a TCP hop to the ingest service, and a second Redis call for the inventory script.
-Three round trips, all avoidable once the item is gone.
+Earlier revisions — inline Kafka publish on the request path, then the outbox without edge
+admission control — measured lower. Each was a single run, and single runs vary by more than
+the differences being claimed, so **those comparisons are not reported here as measurements.**
+
+The reasoning behind each change stands on its own: moving the Kafka publish off the request
+path and rejecting sold-out traffic at the edge both remove network round trips from the hot
+path, and removing work cannot make it slower. Quantifying the gain would require five warm
+runs per configuration. That work has not been done, so no figure is quoted.
+
+### What admission control actually buys
+
+During one instrumented run the ingest service counted 9,181 sold-out responses while clients
+received 9,900 — the missing **719 were rejected at the gateway** and never reached the
+service.
+
+7.3%, not the near-total shedding one might expect, and the reason is worth understanding:
+the edge check happens when a request *enters* the gateway, and in a thundering herd nearly
+all 10,000 arrive before stock runs out. The sold-out flag helps traffic arriving *after* the
+sellout — retries, stragglers, a sale that stays open for minutes — not a single instantaneous
+spike.
 
 ### Crash resilience: `SIGKILL` mid-sale
 
@@ -88,6 +104,60 @@ had already reached Kafka and the unique constraint absorbed every one: **at-lea
 delivery, exactly-once persistence.**
 
 ---
+
+### Graceful degradation: Redis stopped mid-operation
+
+Resilience4j circuit breaker on the inventory call, with a 1-second Lettuce command timeout.
+
+| | before | after |
+|---|---|---|
+| Degraded response, ingest service | 1,010 ms | **5 ms** once the breaker opens |
+| Degraded response, through the gateway | **121 s** | **2–3 s** |
+| Recovery to `CLOSED` after Redis returns | 30 s+ | **under 11 s** |
+
+Three details behind those numbers, each of which cost more to find than to fix:
+
+**Lettuce's default command timeout is 60 seconds.** The gateway makes two Redis calls per
+request — the sold-out check and the rate limiter — so an unreachable Redis stalled every
+request for 121 seconds. A circuit breaker cannot help here: an unbounded call never fails,
+so there is nothing to trip on. **Timeouts are the foundation every other resilience pattern
+is built on.**
+
+**Lettuce's default reconnect backoff caps at 30 seconds.** After a multi-minute outage the
+client sits in a 30-second sleep, so the service stays degraded long after Redis is healthy
+no matter how often the breaker probes. Capping the backoff at 2 seconds makes recovery
+bounded by the breaker's wait duration, which is the knob actually intended to control it.
+
+**The breaker records only connection failures and timeouts**, not every exception. Counting
+application errors would mean a bug in the Lua script trips the breaker and gets reported to
+users as a calm "system busy" — turning a loud, fixable error into a silent one. A circuit
+breaker protects a healthy system from a sick dependency; it is not an error handler.
+
+### Observability
+
+`/actuator/prometheus` exposes the invariants as metrics:
+
+```
+booking_attempts_total{result="acquired"}        100.0
+booking_attempts_total{result="sold_out"}       9181.0
+booking_attempts_total{result="already_booked"}    0.0
+booking_attempts_total{result="not_available"}     0.0
+booking_attempts_total{result="unknown"}           0.0
+booking_outbox_published_total                   100.0
+booking_outbox_relay_errors_total                  0.0
+resilience4j_circuitbreaker_state{state="closed"}  1.0
+```
+
+`booking_attempts_total{result="acquired"}` is invariant 1 as a number a monitoring system can
+alert on: if it ever exceeds the stock that was warmed up, the system oversold. Every outcome
+is registered at startup rather than on first occurrence, so each series exists at zero from
+the beginning — a counter that springs into existence on its first increment can never trigger
+an alert that watches for it.
+
+`booking_outbox_relay_errors_total` is the one that matters operationally. During development
+the relay failed ten times a second for several minutes while the request path looked perfectly
+healthy. A counter climbing on a graph is how that gets noticed in seconds rather than from a
+reconciliation query days later.
 
 ## Invariants
 
@@ -215,15 +285,17 @@ service owns all migrations here as a deliberate simplification.
 **No compensation path.** If a message is permanently dead-lettered, the Redis slot stays
 consumed. A reverse flow should re-increment inventory and remove the user from the set.
 
-**No circuit breaker.** Redis failures surface as 503 through the `UNKNOWN` branch, but
-nothing trips or recovers deliberately.
+**The gateway has timeouts but no circuit breaker.** Its two Redis calls per request are
+unprotected, so during a Redis outage every request pays the full timeout on both — about
+2 seconds — for as long as the outage lasts, even though the ingest service behind it is
+already failing fast. The rate limiter also has no local cache, unlike the sold-out filter.
 
 **The load test is a script, not a test suite.** It should be promoted to JUnit with
 Testcontainers so it runs in CI.
 
-**Single-node benchmark.** All numbers come from one machine with one instance of each
-service. They demonstrate correctness under concurrency and relative improvement between
-revisions; they are not capacity planning figures.
+**Single-node benchmark, client on the same host.** All numbers come from one machine with
+one instance of each service, and the load generator competes with them for CPU. They
+demonstrate correctness under concurrency; they are not capacity planning figures.
 
 ---
 
@@ -313,4 +385,4 @@ Booking responses: `202` slot secured · `409` already booked · `410` sold out 
 
 Java 21 (virtual threads) · Spring Boot 3.5 · Spring Cloud Gateway · Spring Cloud Stream ·
 Redis 7.4 (Lua, Streams, AOF) · Apache Kafka (KRaft) · PostgreSQL 16 · Flyway · Caffeine ·
-Docker Compose
+Resilience4j · Micrometer / Prometheus · Docker Compose
