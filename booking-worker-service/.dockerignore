@@ -1,0 +1,9 @@
+# Keeps the build context small and stops local build output from leaking into the image
+# or invalidating Docker's cache on every build.
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+.mvn/wrapper/maven-wrapper.jar
+README.md
